@@ -6,13 +6,12 @@ const base = dev ? '' : '/pixelator-quantizer';
 
 const config = {
 	kit: {
-		adapter: adapter(),
+		adapter: adapter({
+			fallback: '404.html'
+		}),
 		paths: {
 			base
 		},
-		prerender: {
-			default: true
-		}
 	},
 	plugins: [sveltekit()]
 };
