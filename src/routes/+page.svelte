@@ -22,6 +22,8 @@
 
   let worker: Worker | null = null;
 
+  let originalFilename: string | null;
+
   onMount(() => {
     if (typeof OffscreenCanvas !== 'undefined') {
       originalCanvas = new OffscreenCanvas(MAX_SIZE, MAX_SIZE);
@@ -54,6 +56,7 @@
     if (!file) return;
 
     console.log(`Loaded file: ${file.name}`)
+    originalFilename = file.name;
 
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -159,7 +162,28 @@
         processAndRender();
       }
     }
-  
+  }
+
+  function downloadProcessed(): void {
+    if (!image) return;
+
+    let filename = "output.png"
+    if (originalFilename) {
+      const lastDot = originalFilename.lastIndexOf('.');
+      filename = originalFilename.slice(0, lastDot) + "_output" + originalFilename.slice(lastDot)
+    }
+
+    outputCanvas?.toBlob(blob => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+
+      URL.revokeObjectURL(url);
+    }, "image/png");
   }
 </script>
 
@@ -241,6 +265,10 @@
             />
           </label>
         </div>
+
+        <button class="download-button" onclick={downloadProcessed}>
+          Download
+        </button>
       </div>
     </div>
   </aside>
@@ -454,6 +482,24 @@
     height: 0.3rem;
     border-radius: 999px;
     background: #e5e7eb;
+  }
+
+  .download-button {
+    margin-top: 0.5rem;
+    width: 100%;
+    padding: 0.65rem 0.9rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(148, 163, 184, 0.5);
+    background: #111827;
+    color: #f9fafb;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+
+  .download-button:hover {
+    background: #1f2937;
   }
 
   @media (max-width: 900px) {
