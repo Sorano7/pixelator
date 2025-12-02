@@ -1,32 +1,32 @@
 <script lang="ts">
   import { onMount } from "svelte";
 
-  const MAX_SIZE = 4000;
-
   let images: FileList | null = $state(null);
+  let originalFilename: string | null;
 
   let originalCanvas: OffscreenCanvas | null = null;
   let outputCanvas: HTMLCanvasElement | null = $state(null);
 
   let doPixelate: boolean = $state(true);
-  let blockSize: number = $state(16);
-
+  let blockSize: number = $state(8);
   let doQuantize: boolean = $state(true);
   let paletteSize: number = $state(16);
 
   let image: ImageData;
+  let imageW = 0;
+  let imageH = 0;
 
   let processTimeout: number | null = null;
   let isProcessing = false;
   let pendingRun = false;
-
   let worker: Worker | null = null;
 
-  let originalFilename: string | null;
+  let innerW = $state(0);
+  let innerH = $state(0);
 
   onMount(() => {
     if (typeof OffscreenCanvas !== 'undefined') {
-      originalCanvas = new OffscreenCanvas(MAX_SIZE, MAX_SIZE);
+      originalCanvas = new OffscreenCanvas(0, 0);
     }
 
     if (typeof Worker !== 'undefined') {
@@ -45,9 +45,11 @@
         const data = new Uint8ClampedArray(buffer);
         const imageData = new ImageData(data, width, height);
         ctx.putImageData(imageData, 0, 0);
+
+        resizePreview();
       }
     }
-  })
+  });
 
   $effect(() => {
     if (!images) return;
@@ -79,7 +81,7 @@
       console.error("Could not load image file.")
       URL.revokeObjectURL(url);
     }
-  })
+  });
 
   $effect(() => {
     doPixelate; blockSize; doQuantize; paletteSize; image;
@@ -90,51 +92,49 @@
     processTimeout = window.setTimeout(() => {
       processAndRender();
     }, 150)
-    
-  })
+  });
+
+  $effect(() => {
+    innerW; innerH;
+    resizePreview();
+  });
 
   function drawOriginal(img: HTMLImageElement): void {
     if (!originalCanvas || !outputCanvas) return;
 
-    const imgW = img.naturalWidth || img.width;
-    const imgH = img.naturalHeight || img.height;
-
-    let scale = 1;
-
-    const pixelScale = MAX_SIZE / Math.max(imgW, imgH);
-    scale = Math.min(scale, pixelScale, 1);
-
-    const container = outputCanvas.parentElement as HTMLElement | null;
-    if (container) {
-      const rect = container.getBoundingClientRect();
-      const maxW = rect.width;
-      const maxH = rect.height;
-
-      if (maxW > 0 && maxH > 0) {
-        const containerScale = Math.min(maxW / imgW, maxH / imgH);
-        scale = Math.min(scale, containerScale, 1);
-      }
-    }
-
-    const width = Math.round(imgW * scale);
-    const height = Math.round(imgH * scale);
+    imageW = img.naturalWidth || img.width;
+    imageH = img.naturalHeight || img.height;
 
     const ctx = originalCanvas.getContext('2d')
     if (!ctx) return;
 
-    originalCanvas.width = width;
-    originalCanvas.height = height;
+    originalCanvas.width = imageW;
+    originalCanvas.height = imageH;
 
-    ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(img, 0, 0, width, height);
-    image = ctx.getImageData(0, 0, width, height);
+    ctx.clearRect(0, 0, imageW, imageH);
+    ctx.drawImage(img, 0, 0, imageW, imageH);
+    image = ctx.getImageData(0, 0, imageW, imageH);
 
     const outCtx = outputCanvas.getContext('2d');
     if (!outCtx) return;
 
-    outputCanvas.width = width;
-    outputCanvas.height = height;
-    outCtx.clearRect(0, 0, width, height);
+    outputCanvas.width = imageW;
+    outputCanvas.height = imageH;
+    outCtx.clearRect(0, 0, imageW, imageH);
+
+    resizePreview();
+  }
+
+  function resizePreview(): void {
+    if (!outputCanvas || !imageW || !imageH) return;
+    const container = outputCanvas.parentElement;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const scale = Math.min(rect.width / imageW, rect.height / imageH, 1);
+
+    outputCanvas.style.width = `${imageW * scale}px`;
+    outputCanvas.style.height = `${imageH * scale}px`;
   }
 
   function processAndRender(): void {
@@ -187,6 +187,8 @@
   }
 </script>
 
+<svelte:window bind:innerWidth={innerW} bind:innerHeight={innerH}></svelte:window>
+
 <div class="app">
   <div class="canvas-shell">
     <div class="canvas-inner">
@@ -232,7 +234,7 @@
               id="block"
               type="range"
               min="2"
-              max="64"
+              max="32"
               step="1"
               bind:value={blockSize}
             />
@@ -290,6 +292,9 @@
     max-height: 100vh;
     overflow: hidden;
     background: radial-gradient(circle at top left, #ffffff 0, #eff1f5 40%, #e4e5e9 100%);
+
+    min-width: 0;
+    min-height: 0;
   }
 
   .canvas-shell {
@@ -297,6 +302,9 @@
     display: flex;
     align-items: stretch;
     justify-content: center;
+
+    min-width: 0;
+    min-height: 0;
   }
 
   .canvas-inner {
@@ -311,6 +319,9 @@
     justify-content: center;
     overflow: hidden;
     position: relative;
+    
+    min-width: 0;
+    min-height: 0;
   }
 
   .canvas-inner::before {
@@ -332,8 +343,8 @@
   }
 
   .canvas-inner canvas {
-    max-width: 100%;
-    max-height: 100%;
+    max-width: none;
+    max-height: none;
     width: auto;
     height: auto;
     display: block;
